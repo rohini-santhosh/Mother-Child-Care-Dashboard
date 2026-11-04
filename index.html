@@ -1,0 +1,522 @@
+<title>Mother &amp; Child Care Gap Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Rural vs urban care for mothers and children in every Indian state, from NFHS-5 (2019–21), built for public-policy students and academic researchers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one light dashboard canvas — state bar → 4 headline cards → stage view + ranked gaps → compare / deaths / cost → data panels.
+   Single deliberate light look, matching the approved wireframe. */
+:root{
+  color-scheme: light;
+  --canvas:#F3F4F6; --card:#FFFFFF; --line:#E3E5E9; --chip:#EEF0F3;
+  --ink:#111214; --muted:#111214; --faint:#111214;
+  --urban:#FFD54F; --urban-edge:#C9A000;      /* yellow; dark edge gives 3:1 on white */
+  --rural:#FF9A4D; --rural-edge:#D9670F; --rural-text:#AD4A00;      /* orange; text shade passes AA */
+  --teal:#00796B; --teal-tint:#E6F3F1;
+  --flag:#7A5A00;
+  --font: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --r:12px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{background:var(--canvas)}
+body{color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1680px;margin:0 auto;padding-block:20px 28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:16px}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px;border-radius:6px}
+.sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.num{font-variant-numeric:tabular-nums}
+
+/* page head */
+.pagehead{display:grid;justify-items:start;gap:4px}
+.pagehead h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.pagehead p{margin:0;color:var(--muted);font-size:14px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);min-width:0}
+
+/* state bar */
+.statebar{display:flex;align-items:center;gap:16px;padding:9px 20px;position:relative;flex-wrap:wrap}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
+.picker{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:240px;height:40px;padding:0 14px;background:var(--card);border:1px solid var(--line);border-radius:8px;cursor:pointer;font-weight:600;font-size:15px;text-align:left}
+.picker[aria-expanded="true"]{border:2px solid var(--teal);padding:0 13px}
+.picker .caret{font-size:12px;color:var(--muted);transition:transform .15s}
+.picker[aria-expanded="true"] .caret{transform:rotate(180deg)}
+.legend{margin-left:auto;display:flex;gap:20px;align-items:center;font-weight:500}
+.sw{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:7px}
+.sw.u{background:var(--urban);box-shadow:inset 0 0 0 1px var(--urban-edge)}
+.sw.r{background:var(--rural);box-shadow:inset 0 0 0 1px var(--rural-edge)}
+
+/* dropdown */
+.dd{position:absolute;z-index:20;top:calc(100% + 6px);left:12px;width:min(1084px,calc(100vw - 32px));background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.16);padding:16px 20px 16px 24px}
+.dd-search{width:100%;height:40px;border:0;border-radius:8px;background:var(--chip);padding:0 14px;font:inherit;font-size:15px;color:var(--ink)}
+.dd-search::placeholder{color:var(--muted)}
+.dd-meta{display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px}
+.dd-india{background:none;border:0;padding:4px 0;color:var(--teal);font-weight:600;cursor:pointer}
+.dd-list{display:grid;grid-auto-flow:column;grid-template-columns:repeat(var(--cols,4),minmax(0,1fr));grid-auto-rows:36px;column-gap:12px;max-height:calc(36px * 7);overflow-y:auto;margin:0;padding:0 4px 0 0;list-style:none}
+.dd-list li{border-right:1px solid var(--line);padding-right:12px;display:flex}
+.dd-opt{width:100%;text-align:left;border:0;background:none;padding:0 12px;border-radius:8px;font-size:15px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dd-opt:hover{background:var(--chip)}
+.dd-opt[aria-selected="true"]{background:var(--teal-tint);color:var(--teal);font-weight:700}
+.dd-opt[aria-selected="true"]::before{content:"✓ ";}
+.dd-empty{color:var(--muted);padding:10px 12px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.kpi{padding:16px 20px 14px}
+.kpi .lab{color:var(--ink);font-weight:500;font-size:14px}
+.kpi .val{display:flex;align-items:baseline;gap:8px;margin:2px 0 2px}
+.kpi .big{font-size:36px;font-weight:700;letter-spacing:-.02em;line-height:1.15}
+.kpi .unit{color:var(--muted);font-weight:500;font-size:15px}
+.kpi .sub{color:var(--muted);font-size:13px}
+.kpi.teal .big{color:var(--teal)}
+.answer{margin:0;padding:8px 12px;border-radius:8px;background:var(--teal-tint);color:var(--ink);font-size:13.5px;line-height:1.45}
+.answer b{color:var(--teal)}
+
+/* views */
+.row2{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.view{padding:16px 20px 18px;display:flex;flex-direction:column;gap:12px}
+.vhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.vhead h2{margin:0;font-size:17px;font-weight:600;letter-spacing:-.005em}
+.vhead p{margin:2px 0 0;color:var(--muted);font-size:12px}
+.tbtn{flex:none;background:none;border:1px solid var(--line);border-radius:6px;padding:3px 8px;font-size:12px;color:var(--muted);cursor:pointer}
+.tbtn:hover{color:var(--ink);border-color:var(--faint)}
+.chart{display:grid;gap:6px}
+.datatable{width:100%;border-collapse:collapse;font-size:13px}
+.datatable th,.datatable td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+.datatable th{color:var(--ink);font-weight:600}
+.tablewrap{overflow-x:auto}
+
+/* view 1: paired bars */
+.prow{display:grid;grid-template-columns:200px minmax(0,1fr);align-items:center;gap:12px;padding:4px 6px;margin:0 -6px;border-radius:8px;cursor:pointer;border:0;background:none;text-align:left;width:calc(100% + 12px)}
+.prow:hover{background:var(--chip)}
+.prow.on{background:var(--teal-tint)}
+.prow .name{font-weight:500;font-size:14px}
+.bars{display:grid;gap:3px}
+.bar{display:flex;align-items:center;gap:6px;min-height:15px}
+.fill{height:15px;border-radius:3px;display:flex;align-items:center;padding-left:6px;font-size:10px;font-weight:700;letter-spacing:.06em;color:#1A1A1A;white-space:nowrap;overflow:hidden;flex:none}
+.fill.u{background:var(--urban);box-shadow:inset 0 0 0 1px var(--urban-edge)}
+.fill.r{background:var(--rural);box-shadow:inset 0 0 0 1px var(--rural-edge)}
+.v{font-size:12px;font-weight:600;white-space:nowrap}
+.v.u{color:var(--ink)} .v.r{color:var(--rural-text)}
+.hidden-note{font-size:12px;color:var(--muted);font-style:italic}
+
+/* view 2: diverging ranked gaps */
+.grow{display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr);align-items:center;gap:12px;padding:5px 6px;margin:0 -6px;border-radius:8px;cursor:pointer;border:0;background:none;text-align:left;width:calc(100% + 12px)}
+.grow:hover{background:var(--chip)}
+.grow.on{background:var(--teal-tint)}
+.grow .name{font-size:14px;font-weight:500}
+.grow:first-child .name{font-weight:700}
+.dtrack{position:relative;height:20px}
+.axis{position:absolute;top:-4px;bottom:-4px;width:1px;background:var(--line)}
+.dbar{position:absolute;top:2px;height:16px;border-radius:3px}
+.dbar.r{background:var(--rural);box-shadow:inset 0 0 0 1px var(--rural-edge)}
+.dbar.u{background:var(--urban);box-shadow:inset 0 0 0 1px var(--urban-edge)}
+.dlab{position:absolute;top:1px;font-size:12px;font-weight:600;white-space:nowrap}
+.axislabels{display:grid;grid-template-columns:minmax(150px,230px) minmax(0,1fr);gap:12px;font-size:12px;color:var(--muted)}
+.axislabels .al{position:relative;height:16px}
+
+/* view 3/4/5 simple bars */
+.srow{display:grid;grid-template-columns:120px minmax(0,1fr);align-items:center;gap:12px}
+.srow .name{font-size:14px;font-weight:500}
+.srow.me .name{color:var(--teal);font-weight:700}
+.strack{position:relative;height:16px}
+.sbar{position:absolute;top:1px;height:14px;border-radius:3px;background:var(--rural);box-shadow:inset 0 0 0 1px var(--rural-edge)}
+.srow.me .sbar{background:#3FA698;box-shadow:inset 0 0 0 1px var(--teal)}
+.sbar.neg{background:var(--urban);box-shadow:inset 0 0 0 1px var(--urban-edge)}
+.slab{position:absolute;top:-1px;font-size:12px;font-weight:600;white-space:nowrap}
+.mrow{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;gap:12px;padding:6px 0}
+.mrow .name{font-size:14px;font-weight:500}
+.note{color:var(--ink);font-size:13px;margin:0}
+.flagkey{font-size:12px;color:var(--muted)}
+
+/* about strip + panels */
+.about{background:var(--teal-tint);border:1px solid var(--teal-tint);border-radius:var(--r)}
+.about-bar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:6px 16px;padding:14px 0 12px}
+.about-bar>*{padding-left:20px;padding-right:20px}
+.about-bar>.eyebrow{grid-column:1/-1}
+.about-bar>.pbtn{padding:6px 20px 6px 21px}
+.about-bar>.eyebrow{padding-left:21px}
+.about-bar .eyebrow{color:var(--teal)}
+.pbtn{display:flex;align-items:center;gap:8px;background:none;border:0;padding:6px 0;color:var(--teal);font-weight:600;font-size:14px;cursor:pointer;text-align:left}
+.pbtn .chev{flex:none;font-size:12px;transition:transform .2s}
+.pbtn[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.pbtn[aria-expanded="true"]{text-decoration:underline;text-underline-offset:4px}
+.panel{border-top:1px solid rgba(0,121,107,.18);padding:18px 20px 22px;display:grid;gap:12px;max-width:none}
+.panel h3{margin:0;font-size:17px}
+.panel p,.panel li{max-width:78ch;margin:0}
+.panel ul{margin:0;padding-left:20px;display:grid;gap:6px}
+.panel .cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.panel dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:0}
+.panel dt{font-weight:600}
+.panel dd{margin:0}
+.panel a{color:var(--teal);font-weight:600}
+.foot{color:var(--muted);font-size:12px;display:flex;flex-wrap:wrap;gap:4px 16px;justify-content:space-between}
+
+@media (max-width:1100px){.row3{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:1000px){.about-bar{grid-template-columns:minmax(0,1fr)}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.row2{grid-template-columns:minmax(0,1fr)}.panel .cols{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px){.dd-list{--cols:2!important}.legend{margin-left:0}}
+@media (max-width:560px){
+  .kpis{grid-template-columns:minmax(0,1fr)}
+  .prow{grid-template-columns:minmax(0,1fr)}
+  .grow,.axislabels{grid-template-columns:110px minmax(0,1fr)}
+  .picker{min-width:0;flex:1}
+  .dd{left:8px}
+  .dd-list{--cols:1!important}
+  .mrow{grid-template-columns:110px minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="pagehead">
+    <h1>Mother &amp; Child Care Gap Explorer</h1>
+    <p>Rural v/s Urban Care for Mothers and Children (2019–2021)</p>
+  </header>
+
+  <section class="card statebar" aria-label="Choose a state">
+    <span class="eyebrow" id="sel-label">Select state</span>
+    <button class="picker" id="picker" aria-haspopup="listbox" aria-expanded="false" aria-controls="dd" aria-labelledby="sel-label picker-text">
+      <span id="picker-text">Jharkhand</span><span class="caret" aria-hidden="true">▼</span>
+    </button>
+    <div class="legend" aria-label="Legend">
+      <span><span class="sw u" aria-hidden="true"></span>Urban</span>
+      <span><span class="sw r" aria-hidden="true"></span>Rural</span>
+    </div>
+    <div class="dd" id="dd" hidden>
+      <label class="sr" for="dd-search">Search states and UTs</label>
+      <input class="dd-search" id="dd-search" type="search" placeholder="Search states and UTs…" autocomplete="off">
+      <div class="dd-meta">
+        <span class="eyebrow" id="dd-count">36 states &amp; UTs · A–Z</span>
+        <button class="dd-india" id="dd-india" type="button">India (all states)</button>
+      </div>
+      <ul class="dd-list" id="dd-list" role="listbox" aria-label="States and union territories"></ul>
+    </div>
+  </section>
+
+  <section class="kpis" aria-label="Headline numbers" id="kpis"></section>
+
+  <div class="row2">
+    <section class="card view" aria-labelledby="v1h">
+      <div class="vhead"><div><h2 id="v1h">1 · Urban vs rural care</h2><p>% who got care · click a stage</p></div></div>
+      <p class="sr" id="v1sum" aria-live="polite"></p>
+      <p class="answer" id="v1ans" aria-live="polite"></p>
+      <div class="chart" id="v1" aria-describedby="v1sum"></div>
+      <div class="tablewrap" id="v1t" hidden></div>
+    </section>
+  </div>
+
+  <div class="row3">
+    <section class="card view" aria-labelledby="v3h">
+      <div class="vhead"><div><h2 id="v3h">2 · Compare states</h2><p id="v3sub"></p></div></div>
+      <p class="sr" id="v3sum" aria-live="polite"></p>
+      <p class="answer" id="v3ans" aria-live="polite"></p>
+      <div class="chart" id="v3" aria-describedby="v3sum"></div>
+      <div class="tablewrap" id="v3t" hidden></div>
+    </section>
+    <section class="card view" aria-labelledby="v4h">
+      <div class="vhead"><div><h2 id="v4h">3 · Infant deaths</h2><p>Per 1,000 live births</p></div></div>
+      <p class="sr" id="v4sum" aria-live="polite"></p>
+      <p class="answer" id="v4ans" aria-live="polite"></p>
+      <div class="chart" id="v4" aria-describedby="v4sum"></div>
+      <div class="tablewrap" id="v4t" hidden></div>
+    </section>
+    <section class="card view" aria-labelledby="v5h">
+      <div class="vhead"><div><h2 id="v5h">4 · Cost of a “free” delivery</h2><p>₹ paid per public-facility birth</p></div></div>
+      <p class="sr" id="v5sum" aria-live="polite"></p>
+      <p class="answer" id="v5ans" aria-live="polite"></p>
+      <div class="chart" id="v5" aria-describedby="v5sum"></div>
+      <p class="note">Births in public facilities are meant to be free.</p>
+      <div class="tablewrap" id="v5t" hidden></div>
+    </section>
+  </div>
+
+  <section class="about" aria-label="About this data">
+    <div class="about-bar">
+      <span class="eyebrow">About this data</span>
+      <button class="pbtn" aria-expanded="false" aria-controls="p-read" id="b-read"><span>How to read this</span><span class="chev" aria-hidden="true">▼</span></button>
+      <button class="pbtn" aria-expanded="false" aria-controls="p-not" id="b-not"><span>What this doesn’t show: 2019–21 data, no district detail</span><span class="chev" aria-hidden="true">▼</span></button>
+      <button class="pbtn" aria-expanded="false" aria-controls="p-src" id="b-src"><span>Where this came from: NFHS-5, data.gov.in, GODL</span><span class="chev" aria-hidden="true">▼</span></button>
+    </div>
+
+    <div class="panel" id="p-read" role="region" aria-labelledby="b-read" hidden>
+      <h3>How to read this</h3>
+      <div class="cols">
+        <ul>
+          <li><b>Pick a state</b> in the box at the top. Every number on the page switches to that state.</li>
+          <li><b>Yellow is urban, orange is rural.</b> The urban bar is always on top and the rural bar below it, and each value is printed as a number, so you never need the colours alone.</li>
+          <li><b>View 1:</b> a longer bar means more mothers or children got that care. A shorter orange bar means rural families miss out.</li>
+          
+        </ul>
+        <ul>
+          <li><b>Click any stage</b> in view 1 to compare that stage with India and neighbouring states in view 2.</li>
+          <li><b>View 2</b> shows whether this state's gap is unusual. The neighbour with the smallest gap is marked as a model to learn from.</li>
+          <li><b>Views 3 and 4</b> give the outcome context (infant and newborn deaths) and the cost families still carry.</li>
+          <li><b>Linking stages to schemes:</b> births in a health facility relate to Janani Suraksha Yojana, and child vaccination to Mission Indradhanush, so a wide gap at one stage points to the scheme worth studying.</li>
+          <li id="read-example"></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="panel" id="p-not" role="region" aria-labelledby="b-not" hidden>
+      <h3>What this doesn’t show</h3>
+      <div class="cols">
+        <div>
+          <p class="eyebrow" style="margin-bottom:8px">Gaps and collection method</p>
+          <ul>
+            <li>These are <b>survey estimates</b> from NFHS-5 household interviews, not hospital records. Each number has a margin of error.</li>
+            <li>Fieldwork ran in two phases between 2019 and 2021, and the second phase was paused by COVID-19. Things may have changed since.</li>
+            <li>Numbers in <b>( )</b> are based on only 25–49 cases and are less reliable. Cells shown as <b>–</b> were hidden by the survey because fewer than 25 cases were available. Nothing hidden has been estimated or filled in.</li>
+            <li>Maternal care indicators describe each mother's <b>most recent birth</b> in the five years before the survey.</li>
+            <li>There is <b>no district detail</b> in this file. A state average can hide districts that are far behind.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow" style="margin-bottom:8px">Who is missing, and what not to conclude</p>
+          <ul>
+            <li>The survey covers people living in households. People in institutions, homeless families and many migrants are not counted.</li>
+            <li>Chandigarh has no rural figures. Lakshadweep and some small states have hidden death rates.</li>
+            <li>Rural vs urban is all this view compares. It does not show gaps by caste, income, tribe or religion.</li>
+            <li>View 3 sits next to views 1–2, but it does <b>not prove</b> that more care causes fewer deaths. Many other things affect infant deaths.</li>
+            <li>It does not show health budgets or scheme spending, so it cannot explain <i>why</i> a gap exists, only where it is widest.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="p-src" role="region" aria-labelledby="b-src" hidden>
+      <h3>Where this came from</h3>
+      <div class="cols">
+        <dl>
+          <dt>Source</dt><dd>National Family Health Survey-5 (NFHS-5), State/UT fact sheets. Ministry of Health &amp; Family Welfare and the International Institute for Population Sciences (IIPS), Mumbai.</dd>
+          <dt>Published on</dt><dd><a href="https://data.gov.in/resource/all-india-and-stateut-wise-factsheets-national-family-health-survey-nfhs-5-2019-2021" target="_blank" rel="noopener">data.gov.in: All India and State/UT-wise Factsheets of NFHS-5, 2019–2021</a></dd>
+          <dt>Licence</dt><dd><a href="https://data.gov.in/government-open-data-license-india" target="_blank" rel="noopener">Government Open Data Licence – India (GODL)</a>. Use of this data does not imply endorsement by the data provider.</dd>
+          <dt>Version</dt><dd>NFHS-5, 2019–21 · file datafile.csv (110 rows × 137 columns)</dd>
+          <dt>Accessed</dt><dd>28 October 2026</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const DATA = {"India":{"nmr":{"u":[18.0,0],"r":[27.5,0]},"imr":{"u":[26.6,0],"r":[38.4,0]},"anc1":{"u":[75.5,0],"r":[67.9,0]},"anc4":{"u":[68.1,0],"r":[54.2,0]},"ifa":{"u":[54.0,0],"r":[40.2,0]},"pnc":{"u":[84.6,0],"r":[75.4,0]},"oop":{"u":[3385.0,0],"r":[2770.0,0]},"inst":{"u":[93.8,0],"r":[86.7,0]},"vacc":{"u":[75.5,0],"r":[76.8,0]}},"Andaman & Nicobar Islands":{"nmr":{"u":[null,2],"r":[2.8,1]},"imr":{"u":[null,2],"r":[8.4,1]},"anc1":{"u":[81.2,0],"r":[73.5,0]},"anc4":{"u":[86.0,0],"r":[81.0,0]},"ifa":{"u":[81.2,0],"r":[80.7,0]},"pnc":{"u":[89.4,0],"r":[88.5,0]},"oop":{"u":[4230.0,0],"r":[2089.0,0]},"inst":{"u":[99.2,0],"r":[98.7,0]},"vacc":{"u":[72.1,1],"r":[84.8,0]}},"Andhra Pradesh":{"nmr":{"u":[14.4,0],"r":[22.1,0]},"imr":{"u":[29.8,0],"r":[30.4,0]},"anc1":{"u":[82.7,0],"r":[81.3,0]},"anc4":{"u":[67.2,0],"r":[67.6,0]},"ifa":{"u":[76.7,0],"r":[67.6,0]},"pnc":{"u":[92.2,0],"r":[90.1,0]},"oop":{"u":[2659.0,0],"r":[3248.0,0]},"inst":{"u":[98.6,0],"r":[95.7,0]},"vacc":{"u":[69.3,0],"r":[74.7,0]}},"Arunachal Pradesh":{"nmr":{"u":[12.5,0],"r":[6.9,0]},"imr":{"u":[16.7,0],"r":[12.3,0]},"anc1":{"u":[57.2,0],"r":[52.4,0]},"anc4":{"u":[47.8,0],"r":[34.6,0]},"ifa":{"u":[29.4,0],"r":[22.9,0]},"pnc":{"u":[67.0,0],"r":[54.6,0]},"oop":{"u":[10178.0,0],"r":[9649.0,0]},"inst":{"u":[90.6,0],"r":[77.3,0]},"vacc":{"u":[66.8,0],"r":[64.6,0]}},"Assam":{"nmr":{"u":[15.2,0],"r":[23.4,0]},"imr":{"u":[22.7,0],"r":[33.1,0]},"anc1":{"u":[72.7,0],"r":[62.7,0]},"anc4":{"u":[62.6,0],"r":[49.2,0]},"ifa":{"u":[54.4,0],"r":[46.6,0]},"pnc":{"u":[76.8,0],"r":[63.8,0]},"oop":{"u":[6651.0,0],"r":[5269.0,0]},"inst":{"u":[93.5,0],"r":[82.9,0]},"vacc":{"u":[63.2,0],"r":[66.9,0]}},"Bihar":{"nmr":{"u":[29.5,0],"r":[35.2,0]},"imr":{"u":[43.1,0],"r":[47.3,0]},"anc1":{"u":[59.8,0],"r":[51.9,0]},"anc4":{"u":[32.4,0],"r":[24.0,0]},"ifa":{"u":[26.0,0],"r":[16.7,0]},"pnc":{"u":[62.6,0],"r":[56.5,0]},"oop":{"u":[3511.0,0],"r":[2771.0,0]},"inst":{"u":[84.1,0],"r":[75.0,0]},"vacc":{"u":[66.7,0],"r":[71.6,0]}},"Chandigarh":{"nmr":{"u":[null,2],"r":[null,2]},"imr":{"u":[null,2],"r":[null,2]},"anc1":{"u":[82.2,0],"r":[null,2]},"anc4":{"u":[79.1,0],"r":[null,2]},"ifa":{"u":[73.9,0],"r":[null,2]},"pnc":{"u":[90.5,0],"r":[null,2]},"oop":{"u":[5586.0,0],"r":[null,2]},"inst":{"u":[97.0,0],"r":[null,2]},"vacc":{"u":[81.7,1],"r":[null,2]}},"Chhattisgarh":{"nmr":{"u":[19.3,0],"r":[35.6,0]},"imr":{"u":[26.2,0],"r":[48.7,0]},"anc1":{"u":[71.5,0],"r":[64.1,0]},"anc4":{"u":[62.2,0],"r":[59.6,0]},"ifa":{"u":[41.4,0],"r":[45.9,0]},"pnc":{"u":[90.3,0],"r":[82.3,0]},"oop":{"u":[2536.0,0],"r":[1682.0,0]},"inst":{"u":[93.1,0],"r":[83.9,0]},"vacc":{"u":[77.3,0],"r":[80.4,0]}},"Dadra and Nagar Haveli & Daman and Diu":{"nmr":{"u":[20.3,1],"r":[22.5,1]},"imr":{"u":[33.3,1],"r":[30.4,1]},"anc1":{"u":[71.8,0],"r":[84.0,0]},"anc4":{"u":[77.9,0],"r":[94.8,0]},"ifa":{"u":[56.0,0],"r":[63.7,0]},"pnc":{"u":[91.5,0],"r":[91.7,0]},"oop":{"u":[1132.0,0],"r":[329.0,0]},"inst":{"u":[96.4,0],"r":[96.7,0]},"vacc":{"u":[90.0,0],"r":[100.0,0]}},"Goa":{"nmr":{"u":[null,2],"r":[null,2]},"imr":{"u":[null,2],"r":[null,2]},"anc1":{"u":[66.5,0],"r":[76.2,0]},"anc4":{"u":[92.9,0],"r":[93.1,0]},"ifa":{"u":[87.0,0],"r":[88.2,0]},"pnc":{"u":[96.5,0],"r":[93.7,0]},"oop":{"u":[3875.0,0],"r":[3706.0,0]},"inst":{"u":[99.6,0],"r":[100.0,0]},"vacc":{"u":[77.9,1],"r":[88.1,1]}},"Gujarat":{"nmr":{"u":[16.8,0],"r":[24.8,0]},"imr":{"u":[24.1,0],"r":[35.5,0]},"anc1":{"u":[83.7,0],"r":[76.4,0]},"anc4":{"u":[82.4,0],"r":[73.3,0]},"ifa":{"u":[62.0,0],"r":[58.7,0]},"pnc":{"u":[93.1,0],"r":[87.5,0]},"oop":{"u":[2027.0,0],"r":[1535.0,0]},"inst":{"u":[97.8,0],"r":[92.2,0]},"vacc":{"u":[77.0,0],"r":[75.9,0]}},"Haryana":{"nmr":{"u":[19.0,0],"r":[22.7,0]},"imr":{"u":[28.6,0],"r":[35.3,0]},"anc1":{"u":[85.0,0],"r":[85.3,0]},"anc4":{"u":[63.1,0],"r":[59.2,0]},"ifa":{"u":[50.7,0],"r":[51.5,0]},"pnc":{"u":[92.4,0],"r":[90.8,0]},"oop":{"u":[1768.0,0],"r":[1631.0,0]},"inst":{"u":[96.1,0],"r":[94.4,0]},"vacc":{"u":[74.3,0],"r":[77.9,0]}},"Himachal Pradesh":{"nmr":{"u":[null,2],"r":[21.3,0]},"imr":{"u":[null,2],"r":[27.1,0]},"anc1":{"u":[81.6,0],"r":[71.2,0]},"anc4":{"u":[77.3,0],"r":[69.3,0]},"ifa":{"u":[72.9,0],"r":[66.4,0]},"pnc":{"u":[88.8,0],"r":[86.0,0]},"oop":{"u":[9411.0,0],"r":[3138.0,0]},"inst":{"u":[93.1,0],"r":[87.6,0]},"vacc":{"u":[94.1,1],"r":[88.5,0]}},"Jammu & Kashmir":{"nmr":{"u":[7.5,0],"r":[10.5,0]},"imr":{"u":[14.7,0],"r":[16.7,0]},"anc1":{"u":[90.0,0],"r":[85.5,0]},"anc4":{"u":[83.1,0],"r":[80.2,0]},"ifa":{"u":[34.0,0],"r":[28.5,0]},"pnc":{"u":[89.4,0],"r":[82.6,0]},"oop":{"u":[5680.0,0],"r":[4971.0,0]},"inst":{"u":[98.6,0],"r":[90.5,0]},"vacc":{"u":[83.0,0],"r":[87.2,0]}},"Jharkhand":{"nmr":{"u":[17.7,0],"r":[30.4,0]},"imr":{"u":[22.2,0],"r":[41.1,0]},"anc1":{"u":[76.2,0],"r":[66.2,0]},"anc4":{"u":[48.5,0],"r":[36.4,0]},"ifa":{"u":[37.7,0],"r":[26.1,0]},"pnc":{"u":[79.8,0],"r":[66.7,0]},"oop":{"u":[2584.0,0],"r":[1980.0,0]},"inst":{"u":[89.1,0],"r":[73.1,0]},"vacc":{"u":[67.8,0],"r":[75.1,0]}},"Karnataka":{"nmr":{"u":[15.1,0],"r":[16.2,0]},"imr":{"u":[21.4,0],"r":[27.8,0]},"anc1":{"u":[73.7,0],"r":[69.3,0]},"anc4":{"u":[71.2,0],"r":[70.6,0]},"ifa":{"u":[50.7,0],"r":[40.9,0]},"pnc":{"u":[87.4,0],"r":[87.4,0]},"oop":{"u":[5042.0,0],"r":[4911.0,0]},"inst":{"u":[98.3,0],"r":[96.2,0]},"vacc":{"u":[80.0,0],"r":[86.5,0]}},"Kerala":{"nmr":{"u":[2.6,0],"r":[4.2,0]},"imr":{"u":[3.5,0],"r":[5.2,0]},"anc1":{"u":[93.9,0],"r":[93.3,0]},"anc4":{"u":[79.3,0],"r":[78.0,0]},"ifa":{"u":[80.5,0],"r":[79.5,0]},"pnc":{"u":[93.1,0],"r":[93.4,0]},"oop":{"u":[6602.0,0],"r":[6789.0,0]},"inst":{"u":[99.7,0],"r":[99.8,0]},"vacc":{"u":[77.6,0],"r":[78.0,0]}},"Ladakh":{"nmr":{"u":[null,2],"r":[12.1,1]},"imr":{"u":[null,2],"r":[17.4,1]},"anc1":{"u":[84.5,0],"r":[86.1,0]},"anc4":{"u":[78.2,0],"r":[78.5,0]},"ifa":{"u":[13.8,0],"r":[14.5,0]},"pnc":{"u":[80.1,0],"r":[79.5,0]},"oop":{"u":[3911.0,0],"r":[3779.0,0]},"inst":{"u":[99.1,0],"r":[94.0,0]},"vacc":{"u":[null,2],"r":[91.9,0]}},"Lakshadweep":{"nmr":{"u":[null,2],"r":[null,2]},"imr":{"u":[null,2],"r":[null,2]},"anc1":{"u":[99.5,0],"r":[100.0,0]},"anc4":{"u":[86.2,0],"r":[94.2,0]},"ifa":{"u":[83.6,0],"r":[70.4,0]},"pnc":{"u":[90.7,0],"r":[97.8,0]},"oop":{"u":[3054.0,0],"r":[1769.0,0]},"inst":{"u":[99.5,0],"r":[100.0,0]},"vacc":{"u":[87.0,1],"r":[null,2]}},"Madhya Pradesh":{"nmr":{"u":[24.0,0],"r":[30.4,0]},"imr":{"u":[33.9,0],"r":[43.5,0]},"anc1":{"u":[78.4,0],"r":[74.4,0]},"anc4":{"u":[63.3,0],"r":[55.6,0]},"ifa":{"u":[58.6,0],"r":[49.1,0]},"pnc":{"u":[87.6,0],"r":[82.2,0]},"oop":{"u":[1969.0,0],"r":[1523.0,0]},"inst":{"u":[95.8,0],"r":[89.2,0]},"vacc":{"u":[76.5,0],"r":[77.3,0]}},"Maharashtra":{"nmr":{"u":[15.1,0],"r":[17.6,0]},"imr":{"u":[22.6,0],"r":[23.7,0]},"anc1":{"u":[69.5,0],"r":[72.0,0]},"anc4":{"u":[72.2,0],"r":[68.7,0]},"ifa":{"u":[51.4,0],"r":[45.7,0]},"pnc":{"u":[87.3,0],"r":[83.8,0]},"oop":{"u":[3390.0,0],"r":[2675.0,0]},"inst":{"u":[96.7,0],"r":[93.1,0]},"vacc":{"u":[71.7,0],"r":[74.7,0]}},"Manipur":{"nmr":{"u":[5.7,0],"r":[22.7,0]},"imr":{"u":[12.2,0],"r":[31.1,0]},"anc1":{"u":[84.0,0],"r":[77.7,0]},"anc4":{"u":[88.8,0],"r":[74.5,0]},"ifa":{"u":[63.0,0],"r":[46.8,0]},"pnc":{"u":[86.2,0],"r":[66.8,0]},"oop":{"u":[16197.0,0],"r":[13564.0,0]},"inst":{"u":[92.5,0],"r":[73.9,0]},"vacc":{"u":[75.1,0],"r":[65.9,0]}},"Meghalaya":{"nmr":{"u":[14.2,1],"r":[20.6,0]},"imr":{"u":[23.4,1],"r":[33.6,0]},"anc1":{"u":[63.2,0],"r":[52.3,0]},"anc4":{"u":[67.5,0],"r":[49.6,0]},"ifa":{"u":[47.5,0],"r":[42.3,0]},"pnc":{"u":[54.8,0],"r":[42.0,0]},"oop":{"u":[3353.0,0],"r":[3190.0,0]},"inst":{"u":[82.7,0],"r":[54.3,0]},"vacc":{"u":[58.3,0],"r":[64.7,0]}},"Mizoram":{"nmr":{"u":[14.4,0],"r":[8.4,0]},"imr":{"u":[20.6,0],"r":[22.0,0]},"anc1":{"u":[81.0,0],"r":[63.9,0]},"anc4":{"u":[70.3,0],"r":[45.0,0]},"ifa":{"u":[65.0,0],"r":[58.6,0]},"pnc":{"u":[75.9,0],"r":[59.6,0]},"oop":{"u":[8840.0,0],"r":[4901.0,0]},"inst":{"u":[98.8,0],"r":[72.5,0]},"vacc":{"u":[69.6,0],"r":[75.2,0]}},"Nagaland":{"nmr":{"u":[8.4,0],"r":[10.8,0]},"imr":{"u":[17.0,0],"r":[25.8,0]},"anc1":{"u":[64.5,0],"r":[43.6,0]},"anc4":{"u":[39.9,0],"r":[13.1,0]},"ifa":{"u":[16.5,0],"r":[7.7,0]},"pnc":{"u":[62.9,0],"r":[36.3,0]},"oop":{"u":[7035.0,0],"r":[5175.0,0]},"inst":{"u":[65.0,0],"r":[38.8,0]},"vacc":{"u":[68.9,0],"r":[53.7,0]}},"NCT of Delhi":{"nmr":{"u":[17.0,0],"r":[null,2]},"imr":{"u":[24.2,0],"r":[null,2]},"anc1":{"u":[76.5,0],"r":[73.5,0]},"anc4":{"u":[77.1,0],"r":[83.1,0]},"ifa":{"u":[68.9,0],"r":[75.7,0]},"pnc":{"u":[85.6,0],"r":[81.0,0]},"oop":{"u":[2577.0,0],"r":[1402.0,0]},"inst":{"u":[91.8,0],"r":[90.4,0]},"vacc":{"u":[76.0,0],"r":[74.7,1]}},"Odisha":{"nmr":{"u":[24.6,0],"r":[27.5,0]},"imr":{"u":[31.2,0],"r":[37.2,0]},"anc1":{"u":[79.2,0],"r":[76.5,0]},"anc4":{"u":[82.0,0],"r":[77.4,0]},"ifa":{"u":[64.4,0],"r":[60.2,0]},"pnc":{"u":[91.7,0],"r":[87.8,0]},"oop":{"u":[5066.0,0],"r":[3998.0,0]},"inst":{"u":[97.5,0],"r":[91.3,0]},"vacc":{"u":[92.0,0],"r":[90.2,0]}},"Puducherry":{"nmr":{"u":[3.2,0],"r":[null,2]},"imr":{"u":[4.1,0],"r":[null,2]},"anc1":{"u":[87.8,0],"r":[68.6,0]},"anc4":{"u":[90.0,0],"r":[78.9,0]},"ifa":{"u":[82.4,0],"r":[88.4,0]},"pnc":{"u":[91.9,0],"r":[96.2,0]},"oop":{"u":[2778.0,0],"r":[4297.0,0]},"inst":{"u":[99.5,0],"r":[99.7,0]},"vacc":{"u":[85.5,0],"r":[68.4,1]}},"Punjab":{"nmr":{"u":[16.0,0],"r":[24.9,0]},"imr":{"u":[20.1,0],"r":[32.4,0]},"anc1":{"u":[67.1,0],"r":[69.3,0]},"anc4":{"u":[60.8,0],"r":[58.4,0]},"ifa":{"u":[56.4,0],"r":[54.8,0]},"pnc":{"u":[82.4,0],"r":[88.3,0]},"oop":{"u":[4352.0,0],"r":[3476.0,0]},"inst":{"u":[92.0,0],"r":[95.5,0]},"vacc":{"u":[73.2,0],"r":[77.9,0]}},"Rajasthan":{"nmr":{"u":[13.3,0],"r":[21.9,0]},"imr":{"u":[22.2,0],"r":[32.2,0]},"anc1":{"u":[80.5,0],"r":[75.1,0]},"anc4":{"u":[60.6,0],"r":[53.9,0]},"ifa":{"u":[39.6,0],"r":[32.3,0]},"pnc":{"u":[87.0,0],"r":[84.8,0]},"oop":{"u":[2384.0,0],"r":[2034.0,0]},"inst":{"u":[97.5,0],"r":[94.2,0]},"vacc":{"u":[83.2,0],"r":[79.7,0]}},"Sikkim":{"nmr":{"u":[null,2],"r":[7.8,0]},"imr":{"u":[null,2],"r":[17.8,0]},"anc1":{"u":[58.5,0],"r":[66.5,0]},"anc4":{"u":[51.4,0],"r":[62.3,0]},"ifa":{"u":[48.4,0],"r":[58.2,0]},"pnc":{"u":[58.9,0],"r":[75.0,0]},"oop":{"u":[9015.0,1],"r":[8028.0,0]},"inst":{"u":[92.0,0],"r":[96.3,0]},"vacc":{"u":[null,2],"r":[83.2,0]}},"Tamil Nadu":{"nmr":{"u":[8.5,0],"r":[16.1,0]},"imr":{"u":[14.9,0],"r":[21.7,0]},"anc1":{"u":[76.7,0],"r":[78.0,0]},"anc4":{"u":[88.8,0],"r":[90.8,0]},"ifa":{"u":[84.2,0],"r":[81.0,0]},"pnc":{"u":[92.5,0],"r":[93.7,0]},"oop":{"u":[3647.0,0],"r":[3097.0,0]},"inst":{"u":[99.8,0],"r":[99.4,0]},"vacc":{"u":[86.4,0],"r":[91.7,0]}},"Telangana":{"nmr":{"u":[13.8,0],"r":[18.8,0]},"imr":{"u":[22.0,0],"r":[29.3,0]},"anc1":{"u":[89.8,0],"r":[87.6,0]},"anc4":{"u":[71.1,0],"r":[70.0,0]},"ifa":{"u":[63.2,0],"r":[54.6,0]},"pnc":{"u":[88.0,0],"r":[87.3,0]},"oop":{"u":[3594.0,0],"r":[3966.0,0]},"inst":{"u":[97.7,0],"r":[96.6,0]},"vacc":{"u":[74.7,0],"r":[81.5,0]}},"Tripura":{"nmr":{"u":[13.9,1],"r":[25.5,0]},"imr":{"u":[23.2,1],"r":[41.8,0]},"anc1":{"u":[71.8,0],"r":[60.5,0]},"anc4":{"u":[64.2,0],"r":[49.1,0]},"ifa":{"u":[28.7,0],"r":[26.0,0]},"pnc":{"u":[83.6,0],"r":[68.3,0]},"oop":{"u":[6223.0,0],"r":[6774.0,0]},"inst":{"u":[94.8,0],"r":[87.5,0]},"vacc":{"u":[82.4,0],"r":[65.5,0]}},"Uttar Pradesh":{"nmr":{"u":[27.7,0],"r":[37.8,0]},"imr":{"u":[42.0,0],"r":[52.6,0]},"anc1":{"u":[70.8,0],"r":[60.2,0]},"anc4":{"u":[52.3,0],"r":[39.6,0]},"ifa":{"u":[29.8,0],"r":[20.2,0]},"pnc":{"u":[79.2,0],"r":[70.0,0]},"oop":{"u":[3252.0,0],"r":[2117.0,0]},"inst":{"u":[85.5,0],"r":[82.9,0]},"vacc":{"u":[67.2,0],"r":[70.2,0]}},"Uttarakhand":{"nmr":{"u":[36.2,0],"r":[30.6,0]},"imr":{"u":[38.3,0],"r":[39.5,0]},"anc1":{"u":[74.6,0],"r":[66.0,0]},"anc4":{"u":[71.0,0],"r":[57.3,0]},"ifa":{"u":[52.1,0],"r":[43.8,0]},"pnc":{"u":[84.0,0],"r":[75.0,0]},"oop":{"u":[3124.0,0],"r":[3447.0,0]},"inst":{"u":[89.4,0],"r":[80.4,0]},"vacc":{"u":[82.0,0],"r":[80.2,0]}},"West Bengal":{"nmr":{"u":[16.1,0],"r":[15.3,0]},"imr":{"u":[21.0,0],"r":[22.4,0]},"anc1":{"u":[74.9,0],"r":[71.8,0]},"anc4":{"u":[81.2,0],"r":[73.8,0]},"ifa":{"u":[64.4,0],"r":[61.8,0]},"pnc":{"u":[74.1,0],"r":[65.7,0]},"oop":{"u":[2675.0,0],"r":[2686.0,0]},"inst":{"u":[92.3,0],"r":[91.6,0]},"vacc":{"u":[83.6,0],"r":[89.3,0]}}};
+const STAGES = [
+  {k:'anc1', name:'1st-trimester check-up', full:'Mothers who had an antenatal check-up in the first trimester'},
+  {k:'anc4', name:'4+ antenatal visits', full:'Mothers who had at least 4 antenatal care visits'},
+  {k:'ifa',  name:'Iron-folic acid, 100+ days', full:'Mothers who took iron folic acid for 100 days or more in pregnancy'},
+  {k:'inst', name:'Birth in a health facility', full:'Institutional births'},
+  {k:'pnc',  name:'Mother checked ≤2 days', full:'Mothers who received postnatal care within 2 days of delivery'},
+  {k:'vacc', name:'Child fully vaccinated', full:'Children age 12–23 months fully vaccinated'}
+];
+const NEIGH = {
+ 'Andaman & Nicobar Islands':[], 'Andhra Pradesh':['Telangana','Karnataka','Tamil Nadu','Odisha','Chhattisgarh'],
+ 'Arunachal Pradesh':['Assam','Nagaland'], 'Assam':['Arunachal Pradesh','Nagaland','Manipur','Mizoram','Tripura','Meghalaya','West Bengal'],
+ 'Bihar':['Uttar Pradesh','Jharkhand','West Bengal'], 'Chandigarh':['Punjab','Haryana'],
+ 'Chhattisgarh':['Madhya Pradesh','Uttar Pradesh','Jharkhand','Odisha','Andhra Pradesh','Telangana','Maharashtra'],
+ 'Dadra and Nagar Haveli & Daman and Diu':['Gujarat','Maharashtra'], 'Goa':['Maharashtra','Karnataka'],
+ 'Gujarat':['Rajasthan','Madhya Pradesh','Maharashtra','Dadra and Nagar Haveli & Daman and Diu'],
+ 'Haryana':['Punjab','Himachal Pradesh','Uttarakhand','Uttar Pradesh','Rajasthan','NCT of Delhi'],
+ 'Himachal Pradesh':['Jammu & Kashmir','Ladakh','Punjab','Haryana','Uttarakhand'],
+ 'Jammu & Kashmir':['Ladakh','Himachal Pradesh','Punjab'], 'Jharkhand':['Bihar','Uttar Pradesh','Chhattisgarh','Odisha','West Bengal'],
+ 'Karnataka':['Goa','Maharashtra','Telangana','Andhra Pradesh','Tamil Nadu','Kerala'], 'Kerala':['Karnataka','Tamil Nadu'],
+ 'Ladakh':['Jammu & Kashmir','Himachal Pradesh'], 'Lakshadweep':[],
+ 'Madhya Pradesh':['Rajasthan','Uttar Pradesh','Chhattisgarh','Maharashtra','Gujarat'],
+ 'Maharashtra':['Gujarat','Madhya Pradesh','Chhattisgarh','Telangana','Karnataka','Goa'],
+ 'Manipur':['Nagaland','Mizoram','Assam'], 'Meghalaya':['Assam'], 'Mizoram':['Assam','Manipur','Tripura'],
+ 'Nagaland':['Assam','Arunachal Pradesh','Manipur'], 'NCT of Delhi':['Haryana','Uttar Pradesh'],
+ 'Odisha':['West Bengal','Jharkhand','Chhattisgarh','Andhra Pradesh'], 'Puducherry':['Tamil Nadu','Kerala','Andhra Pradesh'],
+ 'Punjab':['Jammu & Kashmir','Himachal Pradesh','Haryana','Rajasthan'], 'Rajasthan':['Punjab','Haryana','Uttar Pradesh','Madhya Pradesh','Gujarat'],
+ 'Sikkim':['West Bengal'], 'Tamil Nadu':['Kerala','Karnataka','Andhra Pradesh','Puducherry'],
+ 'Telangana':['Maharashtra','Chhattisgarh','Andhra Pradesh','Karnataka'], 'Tripura':['Assam','Mizoram'],
+ 'Uttar Pradesh':['Uttarakhand','Haryana','NCT of Delhi','Rajasthan','Madhya Pradesh','Chhattisgarh','Jharkhand','Bihar'],
+ 'Uttarakhand':['Himachal Pradesh','Haryana','Uttar Pradesh'], 'West Bengal':['Sikkim','Assam','Bihar','Jharkhand','Odisha']
+};
+const SHORT = {'Dadra and Nagar Haveli & Daman and Diu':'Dadra & NH and Daman & Diu','Andaman & Nicobar Islands':'Andaman & Nicobar'};
+const STATES = Object.keys(DATA).filter(s=>s!=='India').sort((a,b)=>(SHORT[a]||a).localeCompare(SHORT[b]||b));
+const label = s => s==='India' ? 'India (all states)' : (SHORT[s]||s);
+const slug = s => s.toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const BYSLUG = Object.fromEntries([...STATES,'India'].map(s=>[slug(s),s]));
+const esc = t => String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// value helpers: cell = [value, flag]; flag 0 ok, 1 low sample, 2 suppressed, 3 blank
+function cell(st,k,a){const c=(DATA[st]&&DATA[st][k]&&DATA[st][k][a])||[null,3];return {v:c[0],f:c[1]};}
+function fmt(c,dec=1){if(c.v===null)return '–';const t=c.v.toFixed(dec);return c.f===1?'('+t+')':t;}
+function fmtRs(c){if(c.v===null)return '–';const t='₹'+Math.round(c.v).toLocaleString('en-IN');return c.f===1?'('+t+')':t;}
+function gap(st,k){const u=cell(st,k,'u'),r=cell(st,k,'r');if(u.v===null||r.v===null)return null;return +(u.v-r.v).toFixed(1);}
+function ord(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);}
+function rankOf(st,k){const list=STATES.map(s=>[s,gap(s,k)]).filter(x=>x[1]!==null).sort((a,b)=>b[1]-a[1]);const i=list.findIndex(x=>x[0]===st);return {rank:i+1,of:list.length,list};}
+function why(c){return c.f===2?'hidden by the survey (fewer than 25 cases)':'not available in the source file';}
+
+let state='Jharkhand', stage=null;
+
+// ---------- dropdown ----------
+const picker=document.getElementById('picker'), dd=document.getElementById('dd'), ddList=document.getElementById('dd-list'), ddSearch=document.getElementById('dd-search');
+function buildList(q=''){
+  const items=STATES.filter(s=>label(s).toLowerCase().includes(q.toLowerCase()));
+  const cols=getComputedStyle(ddList).getPropertyValue('--cols').trim()||4;
+  ddList.style.gridTemplateRows='repeat('+Math.max(1,Math.ceil(items.length/(+cols||4)))+',36px)';
+  ddList.innerHTML=items.length?items.map(s=>`<li role="none"><button type="button" class="dd-opt" role="option" data-s="${esc(s)}" aria-selected="${s===state}" title="${esc(s)}">${esc(label(s))}</button></li>`).join(''):'<li class="dd-empty">No state or UT matches “'+esc(q)+'”.</li>';
+  document.getElementById('dd-count').textContent=(q?items.length+' of 36':'36')+' states & UTs · A–Z';
+}
+function openDD(){dd.hidden=false;picker.setAttribute('aria-expanded','true');ddSearch.value='';buildList();ddSearch.focus();const sel=ddList.querySelector('[aria-selected="true"]');if(sel)sel.scrollIntoView({block:'nearest'});}
+function closeDD(focus=true){dd.hidden=true;picker.setAttribute('aria-expanded','false');if(focus)picker.focus();}
+picker.addEventListener('click',()=>dd.hidden?openDD():closeDD());
+ddSearch.addEventListener('input',()=>buildList(ddSearch.value));
+ddSearch.addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();const f=ddList.querySelector('.dd-opt');if(f)f.focus();}if(e.key==='Enter'){const f=ddList.querySelector('.dd-opt');if(f){e.preventDefault();choose(f.dataset.s);}}});
+ddList.addEventListener('click',e=>{const b=e.target.closest('.dd-opt');if(b)choose(b.dataset.s);});
+ddList.addEventListener('keydown',e=>{const opts=[...ddList.querySelectorAll('.dd-opt')];const i=opts.indexOf(document.activeElement);if(i<0)return;
+  const rows=Math.ceil(opts.length/(+getComputedStyle(ddList).getPropertyValue('--cols').trim()||4));
+  const go=j=>{if(opts[j]){e.preventDefault();opts[j].focus();}};
+  if(e.key==='ArrowDown')go(i+1); if(e.key==='ArrowUp')i===0?(e.preventDefault(),ddSearch.focus()):go(i-1);
+  if(e.key==='ArrowRight')go(i+rows); if(e.key==='ArrowLeft')go(i-rows);});
+document.getElementById('dd-india').addEventListener('click',()=>choose('India'));
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!dd.hidden)closeDD();});
+document.addEventListener('click',e=>{if(!dd.hidden&&!dd.contains(e.target)&&!picker.contains(e.target))closeDD(false);});
+function choose(s){state=s;stage=null;closeDD();render();
+  try{history.replaceState(null,'','#'+slug(s));}catch(_){}
+  try{localStorage.setItem('mcge-state',s);}catch(_){}}
+
+// ---------- KPIs ----------
+function renderKPIs(){
+  const gaps=STAGES.map(s=>({s,g:gap(state,s.k)})).filter(x=>x.g!==null);
+  const pos=gaps.filter(x=>x.g>0).sort((a,b)=>b.g-a.g), neg=gaps.filter(x=>x.g<0).sort((a,b)=>a.g-b.g);
+  const k=[];
+  const sel=STAGES.find(x=>x.k===stage)||(pos[0]&&pos[0].s)||STAGES[0];
+  const sg=gap(state,sel.k), isWidest=pos[0]&&pos[0].s.k===sel.k;
+  if(sg===null) k.push({lab:'Rural gap · '+sel.name.toLowerCase(),big:'–',unit:'',sub:"Can't compare: a value is hidden or missing",teal:true});
+  else k.push({lab:isWidest?'Widest rural gap':'Rural gap · selected stage',big:Math.abs(sg).toFixed(1),unit:'pts',sub:sel.name+(sg>0?' · rural behind':sg<0?' · urban behind':' · level'),teal:true});
+  if(state==='India'){const v=STATES.filter(s=>gap(s,sel.k)!==null);k.push({lab:'States where rural is behind',big:String(v.filter(s=>gap(s,sel.k)>0).length),unit:'of '+v.length,sub:'on '+sel.name.toLowerCase()});}
+  else if(sg!==null){const r=rankOf(state,sel.k);k.push({lab:'Rank among states',big:ord(r.rank),unit:'of '+r.of,sub:sg>0?'widest gap in '+sel.name.toLowerCase():'rural is ahead here · 1st = rural furthest behind'});}
+  else k.push({lab:'Rank among states',big:'–',unit:'',sub:'No gap to rank for this stage'});
+  if(neg.length) k.push({lab:'Where urban is behind',big:Math.abs(neg[0].g).toFixed(1),unit:'pts',sub:neg[0].s.name+(neg.length>1?' + '+(neg.length-1)+' more':''),teal:true});
+  else k.push({lab:'Where urban is behind',big:'None',unit:'',sub:'Urban is ahead or level at every stage',teal:true});
+  document.getElementById('kpis').innerHTML=k.map(x=>`<div class="card kpi${x.teal?' teal':''}"><div class="lab">${x.lab}</div><div class="val"><span class="big num">${esc(x.big)}</span><span class="unit">${esc(x.unit)}</span></div><div class="sub">${esc(x.sub)}</div></div>`).join('');
+  return {pos,neg};
+}
+
+// ---------- view 1 ----------
+function barHTML(c,a,max,unitFn){
+  if(c.v===null) return `<div class="bar"><span class="hidden-note">${a==='u'?'Urban':'Rural'}: ${c.f===2?'hidden (fewer than 25 cases)':'not available'}</span></div>`;
+  const pct=Math.max(0,Math.min(100,c.v/max*100));
+  const lab='';
+  return `<div class="bar"><span class="fill ${a}" style="width:calc(${pct}% * 0.82)">${lab}</span><span class="v ${a} num">${(unitFn||fmt)(c)}</span></div>`;
+}
+function renderV1(){
+  const el=document.getElementById('v1');
+  el.innerHTML=STAGES.map(s=>{const u=cell(state,s.k,'u'),r=cell(state,s.k,'r');
+    return `<button type="button" class="prow${stage===s.k?' on':''}" data-k="${s.k}" aria-pressed="${stage===s.k}" aria-label="${esc(s.name)}: urban ${fmt(u)}, rural ${fmt(r)}. Select to compare across states."><span class="name">${s.name}</span><span class="bars" aria-hidden="true">${barHTML(u,'u',100)}${barHTML(r,'r',100)}</span></button>`;}).join('');
+  const parts=STAGES.map(s=>`${s.name}: urban ${fmt(cell(state,s.k,'u'))}%, rural ${fmt(cell(state,s.k,'r'))}%`);
+  document.getElementById('v1sum').textContent=`${label(state)}. Share of mothers or children who received each type of care. `+parts.join('; ')+'.';
+  {const gs=STAGES.map(s=>({s,g:gap(state,s.k)})).filter(x=>x.g!==null);const first=gs.find(x=>x.g>0);const wid=gs.filter(x=>x.g>0).sort((a,b)=>b.g-a.g)[0];
+   document.getElementById('v1ans').innerHTML=!gs.length?`<b>Answer:</b> rural figures are hidden for ${esc(label(state))}, so no rural–urban gaps can be shown.`:!first?`<b>Answer:</b> in ${esc(label(state))}, rural mothers and children are not behind at any stage with data.`
+    :`<b>Answer:</b> in ${esc(label(state))}, rural mothers and children first fall behind at <b>${esc(first.s.name.toLowerCase())}</b> (${first.g.toFixed(1)} pts). The widest gap is <b>${esc(wid.s.name.toLowerCase())}</b> (${wid.g.toFixed(1)} pts). Rural is behind at ${gs.filter(x=>x.g>0).length} of ${gs.length} stages.`;}
+  table('v1t',['Stage of care','Urban %','Rural %'],STAGES.map(s=>[s.name,fmt(cell(state,s.k,'u')),fmt(cell(state,s.k,'r'))]));
+}
+
+// ---------- view 2 ----------
+const GMAX=30;
+function gpos(g,neg){/* axis placed so −10..+30 fits */ const lo=-10, span=GMAX-lo; return ((g-lo)/span)*100;}
+function renderV2(){
+  const rows=STAGES.map(s=>({s,g:gap(state,s.k)}));
+  const have=rows.filter(r=>r.g!==null).sort((a,b)=>b.g-a.g), miss=rows.filter(r=>r.g===null);
+  const ax=gpos(0);
+  return have;
+}
+
+// ---------- view 3 ----------
+function renderV3(k){
+  const s=STAGES.find(x=>x.k===k);
+  let set, sub, modelName=null;
+  if(state==='India'){
+    const r=rankOf('India',k).list.slice(0,5).map(x=>x[0]);set=[...r,'India'];sub=`Widest-gap states · ${s.name}`;
+  } else {
+    const nb=(NEIGH[state]||[]).filter(n=>DATA[n]);
+    if(nb.length){set=[state,...nb,'India'];sub=`vs neighbours & India · ${s.name}`;}
+    else{const mine=gap(state,k);const peers=STATES.filter(x=>x!==state&&gap(x,k)!==null).sort((a,b)=>Math.abs((gap(a,k))-(mine??0))-Math.abs((gap(b,k))-(mine??0))).slice(0,4);
+      set=[state,...peers,'India'];sub=`vs similar states & India · ${s.name}`;}
+  }
+  const rows=set.map(n=>({n,g:gap(n,k)}));
+  const ok=rows.filter(r=>r.g!==null).sort((a,b)=>b.g-a.g), miss=rows.filter(r=>r.g===null);
+  const mine=gap(state,k);
+  if(state!=='India'&&mine!==null&&mine>0){const nbOk=ok.filter(r=>r.n!==state&&r.n!=='India');if(nbOk.length){const best=nbOk.reduce((a,b)=>Math.abs(b.g)<Math.abs(a.g)?b:a);if(Math.abs(best.g)<Math.abs(mine))modelName=best.n;}}
+  const lo=Math.min(0,...ok.map(r=>r.g)), hi=Math.max(1,...ok.map(r=>r.g));const span=(hi-lo)*1.45||1;const P=v=>((v-lo)/span)*100;const ax=P(0);
+  document.getElementById('v3sub').textContent=sub;
+  {const ig=gap('India',k);let t;
+   if(state==='India') t=`<b>Answer:</b> India's gap in ${esc(s.name.toLowerCase())} is ${ig.toFixed(1)} pts; the states listed have the widest gaps.`;
+   else if(mine===null) t=`<b>Answer:</b> ${esc(label(state))} can't be compared on this stage because a value is hidden or missing.`;
+   else {const nb=ok.filter(r=>r.n!==state&&r.n!=='India');const worse=nb.filter(r=>r.g<mine).length;
+     const d=g=>g>0?`rural behind by ${g.toFixed(1)} pts`:g<0?`urban behind by ${Math.abs(g).toFixed(1)} pts`:'level';
+     t=`<b>Answer:</b> ${d(mine).replace(/^./,c=>c.toUpperCase())} (India: ${ig.toFixed(1)}). Rural is <b>${mine>ig?'worse off':mine<ig?'better off':'level'}</b> than India; worse than ${worse} of ${nb.length} nearby states.`;}
+   document.getElementById('v3ans').innerHTML=t;}
+  document.getElementById('v3').innerHTML=ok.map(r=>{const me=r.n===state;
+    const left=r.g>=0?ax:P(r.g), w=Math.abs(P(r.g)-ax);
+    const extra='';
+    return `<div class="srow${me?' me':''}"><span class="name" title="${esc(r.n)}">${esc(label(r.n).replace(' (all states)',''))}</span><span class="strack" aria-hidden="true">${lo<0?`<span class="axis" style="left:${ax}%"></span>`:''}<span class="sbar${r.g<0?' neg':''}" style="left:${left}%;width:${Math.max(w,0.6)}%"></span><span class="slab num" style="left:calc(${Math.max(P(r.g),ax)}% + 6px)">${r.g.toFixed(1)}${r.g<0?' (urban behind)':''}${extra}</span></span></div>`;}).join('')
+    +miss.map(r=>`<div class="srow"><span class="name">${esc(label(r.n))}</span><span class="hidden-note">Gap can't be shown: a value is hidden or missing</span></div>`).join('')
+    +(modelName?`<p class="note" style="margin-top:6px"><b style="color:var(--ink)">Model to study:</b> ${esc(label(modelName))} has the smallest gap nearby (${gap(modelName,k).toFixed(1)} pts).</p>`:'');
+  document.getElementById('v3sum').textContent=sub+'. '+ok.map(r=>`${label(r.n)} ${r.g.toFixed(1)}`).join('; ')+(modelName?`. Smallest nearby gap: ${label(modelName)}.`:'.');
+  table('v3t',['Place','Gap (urban − rural, pts)'],ok.map(r=>[label(r.n),r.g.toFixed(1)]).concat(miss.map(r=>[label(r.n),'not comparable'])));
+}
+
+// ---------- view 4 & 5 ----------
+function pair(id,rows,max,fmtFn){
+  document.getElementById(id).innerHTML=rows.map(r=>{const u=cell(state,r.k,'u'),rr=cell(state,r.k,'r');
+    return `<div class="mrow"><span class="name">${r.name}</span><span class="bars">${barHTML(u,'u',max,c=>fmtFn(c)+' urban')}${barHTML(rr,'r',max,c=>fmtFn(c)+' rural')}</span></div>`;}).join('');
+}
+function renderV4(){
+  const rows=[{k:'imr',name:'Infant (under 1)'},{k:'nmr',name:'Newborn (1st month)'}];
+  const vals=rows.flatMap(r=>[cell(state,r.k,'u').v,cell(state,r.k,'r').v]).filter(v=>v!==null);
+  pair('v4',rows,Math.max(10,...vals)*1.25,fmt);
+  {const iu=cell(state,'imr','u'),ir=cell(state,'imr','r');const behind=STAGES.filter(s=>{const g=gap(state,s.k);return g!==null&&g>0;}).length;
+   const hi=STATES.filter(s=>gap(s,'imr')!==null&&gap(s,'imr')<0).length, of=STATES.filter(s=>gap(s,'imr')!==null).length;
+   let t;
+   if(iu.v===null||ir.v===null) t=`<b>Answer:</b> death rate hidden for ${esc(label(state))}. Higher rural deaths in ${hi} of ${of} states.`;
+   else{const d=(ir.v-iu.v);t=`<b>Answer:</b> ${d>0?`<b>${d.toFixed(1)} more</b> rural babies per 1,000 die before age 1`:d<0?`rural infant deaths are <b>${Math.abs(d).toFixed(1)} lower</b> per 1,000`:`rural and urban infant deaths are level`}. Higher rural deaths in ${hi} of ${of} states. Not proof of cause.`;}
+   document.getElementById('v4ans').innerHTML=t;}
+  document.getElementById('v4sum').textContent=`${label(state)}. Deaths per 1,000 live births. Infant: urban ${fmt(cell(state,'imr','u'))}, rural ${fmt(cell(state,'imr','r'))}. Newborn: urban ${fmt(cell(state,'nmr','u'))}, rural ${fmt(cell(state,'nmr','r'))}.`;
+  table('v4t',['Measure','Urban','Rural'],rows.map(r=>[r.name+' deaths per 1,000',fmt(cell(state,r.k,'u')),fmt(cell(state,r.k,'r'))]));
+}
+function renderV5(){
+  const rows=[{k:'oop',name:'Per delivery'}];
+  const vals=[cell(state,'oop','u').v,cell(state,'oop','r').v].filter(v=>v!==null);
+  pair('v5',rows,Math.max(500,...vals)*1.3,fmtRs);
+  {const u=cell(state,'oop','u'),r=cell(state,'oop','r');
+   document.getElementById('v5ans').innerHTML=(u.v===null&&r.v===null)?`<b>Answer:</b> cost data is not available for ${esc(label(state))}.`
+    :`<b>Answer: No.</b> Families still pay ${r.v!==null?'<b>'+fmtRs(r)+'</b> rural':'– rural'} and ${u.v!==null?'<b>'+fmtRs(u)+'</b> urban':'– urban'} on average.`;}
+  document.getElementById('v5sum').textContent=`${label(state)}. Average out-of-pocket cost per delivery in a public facility: urban ${fmtRs(cell(state,'oop','u'))}, rural ${fmtRs(cell(state,'oop','r'))}.`;
+  table('v5t',['Area','₹ per delivery'],[['Urban',fmtRs(cell(state,'oop','u'))],['Rural',fmtRs(cell(state,'oop','r'))]]);
+}
+
+// ---------- tables (text alternative) ----------
+function table(id,head,rows){document.getElementById(id).innerHTML=`<table class="datatable"><caption class="sr">${esc(label(state))}</caption><thead><tr>${head.map(h=>`<th scope="col">${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td class="num">${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;}
+document.querySelectorAll('.tbtn').forEach(b=>b.addEventListener('click',()=>{const t=document.getElementById(b.dataset.table+'t'),c=document.getElementById(b.dataset.table);const show=t.hidden;t.hidden=!show;c.hidden=show;b.textContent=show?'Chart':'Table';b.setAttribute('aria-expanded',String(show));}));
+
+// stage selection from views 1 & 2
+['v1'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b)return;stage=b.dataset.k;render(true);const again=document.querySelector(`#${id} [data-k="${stage}"]`);if(again)again.focus();}));
+
+// panels
+document.querySelectorAll('.pbtn').forEach(b=>b.addEventListener('click',()=>{const open=b.getAttribute('aria-expanded')==='true';
+  document.querySelectorAll('.pbtn').forEach(x=>{x.setAttribute('aria-expanded','false');document.getElementById(x.getAttribute('aria-controls')).hidden=true;});
+  if(!open){b.setAttribute('aria-expanded','true');const p=document.getElementById(b.getAttribute('aria-controls'));p.hidden=false;
+    const smooth=!window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(()=>b.closest('.about').scrollIntoView({behavior:smooth?'smooth':'auto',block:'start'}));}}));
+
+function render(keepStage){
+  document.getElementById('picker-text').textContent=label(state);
+  if(!keepStage||!stage){const have=renderV2();const p=have.filter(r=>r.g>0);stage=(p[0]&&p[0].s.k)||(have[0]&&have[0].s.k)||'inst';}
+  const {pos}=renderKPIs();
+  renderV1();renderV3(stage);renderV4();renderV5();
+  const top=pos[0];
+  document.getElementById('read-example').innerHTML=top&&state!=='India'
+    ?`<b>Example, ${esc(label(state))}:</b> the widest gap is ${esc(top.s.name.toLowerCase())}, ${top.g.toFixed(1)} points, so that is where the rural–urban divide is sharpest.`
+    :`<b>Tip:</b> choose your own state to see its gaps.`;
+}
+
+// start: hash > saved > Jharkhand
+(function(){let s=null;const h=(location.hash||'').slice(1);if(h&&BYSLUG[h])s=BYSLUG[h];
+  if(!s){try{const v=localStorage.getItem('mcge-state');if(v&&DATA[v])s=v;}catch(_){}}
+  state=s||'Jharkhand';render();})();
+window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(BYSLUG[h]&&BYSLUG[h]!==state){state=BYSLUG[h];stage=null;render();}});
+</script>
